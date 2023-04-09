@@ -27,10 +27,57 @@
 
 pub use iso_country::Country;
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 include!(concat!(env!("OUT_DIR"), "/isodata.rs"));
+
+#[cfg(feature = "sqlx-type-mysql")]
+impl sqlx::Type<sqlx::MySql> for Currency {
+    fn type_info() -> sqlx::mysql::MySqlTypeInfo {
+        sqlx::mysql::MySqlTypeInfo::__enum()
+    }
+    fn compatible(ty: &sqlx::mysql::MySqlTypeInfo) -> bool {
+        use sqlx::TypeInfo;
+        matches!(ty.name(), "CHAR" | "ENUM" | "TEXT" | "VARCHAR")
+    }
+}
+#[cfg(feature = "sqlx-type-mysql")]
+impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for Currency
+where
+    &'q str: sqlx::Encode<'q, DB>,
+{
+    fn encode_by_ref(
+        &self,
+        buf: &mut <DB as sqlx::database::HasArguments<'q>>::ArgumentBuffer,
+    ) -> sqlx::encode::IsNull {
+        self.code().encode_by_ref(buf)
+    }
+}
+#[cfg(feature = "sqlx-type-mysql")]
+impl<'r, DB: sqlx::Database> sqlx::Decode<'r, DB> for Currency
+where
+    // we want to delegate some of the work to string decoding so let's make sure strings
+    // are supported by the database
+    &'r str: sqlx::Decode<'r, DB>,
+{
+    fn decode(
+        value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
+    ) -> Result<Currency, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        // the interface of ValueRef is largely unstable at the moment
+        // so this is not directly implementable
+
+        // however, you can delegate to a type that matches the format of the type you want
+        // to decode (such as a UTF-8 string)
+
+        let value = <&str as sqlx::Decode<DB>>::decode(value)?;
+
+        // now you can parse this into your type (assuming there is a `FromStr`)
+
+        Self::from_code(value)
+            .ok_or_else(|| Box::<dyn std::error::Error + 'static + Send + Sync>::from("Failed"))
+    }
+}
 
 #[derive(PartialEq, Eq)]
 pub struct CurrencySymbol {
@@ -105,9 +152,9 @@ impl std::str::FromStr for Currency {
 mod tests {
     use crate::{Country, Currency, ParseCurrencyError};
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     use serde_json;
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     use std::collections::HashMap;
 
     #[test]

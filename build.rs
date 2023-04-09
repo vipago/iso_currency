@@ -62,14 +62,13 @@ fn read_table() -> Vec<IsoData> {
 fn write_enum(file: &mut BufWriter<File>, data: &[IsoData]) {
     writeln!(
         file,
-        "#[cfg_attr(feature = \"with-serde\", derive(Serialize, Deserialize))]"
-    )
-    .unwrap();
-    writeln!(
-        file,
         "#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]"
     )
     .unwrap();
+    if cfg!(feature = "serde") {
+        writeln!(file, "#[derive(Serialize, Deserialize)]").unwrap();
+    }
+
     writeln!(file, "pub enum Currency {{").unwrap();
 
     for currency in data.iter() {
